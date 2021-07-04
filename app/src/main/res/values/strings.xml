@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">bluetooth_device</string>
+    <string name="exit_from_app">Exit from App</string>
+    <string name="tap_to_connect">Tap to connect</string>
+    <string name="hear_beat">Hear beat</string>
+    <string name="heart_beat">Heart Beat</string>
+    <string name="_0">0</string>
+    <string name="bpm">Bpm</string>
+    <string name="spo2">SpO2</string>
+    <string name="percentage_symbol">%</string>
+    <string name="temperature">Temperature</string>
+    <string name="degree_celsius">°C</string>
+</resources>
