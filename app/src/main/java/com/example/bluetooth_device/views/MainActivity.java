@@ -1,12 +1,23 @@
 package com.example.bluetooth_device.views;
 
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.AlertDialog;
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattService;
+import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanResult;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -15,8 +26,11 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.View;
@@ -28,25 +42,26 @@ import com.example.bluetooth_device.R;
 import com.example.bluetooth_device.adapters.BTDeviceListAdapter;
 import com.example.bluetooth_device.enums.BluetoothConnectionStates;
 import com.example.bluetooth_device.helpers.BTHelperService;
-import com.example.bluetooth_device.interfaces.IBTHelper;
-import com.example.bluetooth_device.interfaces.IBluetoothConnection;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.List;
 
-public class MainActivity extends AppCompatActivity implements IBluetoothConnection {
+public class MainActivity extends AppCompatActivity {
 
+    private final ArrayList<BluetoothGattCharacteristic> characteristics = new ArrayList<>();
     private BTDeviceListAdapter btSelectArrayAdapter;
     private AlertDialog.Builder btSelectDialog;
+    private  AlertDialog btAlertDialog;
 
     private LottieAnimationView lottieAnimationView;
-    private IBTHelper helper;
+    private BTHelperService helper;
     private TextView tvConnectStatus;
     private TextView tvHeartBeat;
     private TextView tvSpo;
     private TextView tvTemperature;
 
-    private final int REQUEST_CODE = 22;
 
     private final String[] permissions = {
             Manifest.permission.BLUETOOTH,
@@ -54,11 +69,83 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
             Manifest.permission.ACCESS_FINE_LOCATION,
     };
 
+    private BluetoothAdapter bluetoothAdapter;
+    private ActivityResultLauncher<Intent> someActivityResultLauncher;
+
+
+    private final BroadcastReceiver gattUpdateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+            if (BTHelperService.ACTION_GATT_CONNECTED.equals(action)) {
+                MainActivity.this.onConnectedToDevice();
+            } else if (BTHelperService.ACTION_GATT_DISCONNECTED.equals(action)) {
+                MainActivity.this.onDisconnectedFromDevice();
+            }else  if(BTHelperService.ACTION_GATT_DISCONNECTING.equals(action)){
+                MainActivity.this.onDisconnecting();
+            }else if(BTHelperService.ACTION_GATT_CONNECTING.equals(action)){
+                MainActivity.this.onConnecting();
+            }else if(BTHelperService.ACTION_GATT_SERVICE_DISCOVERED.equals(action)){
+                MainActivity.this.discoverServices();
+            }else if(BTHelperService.ACTION_DATA_AVAILABLE.equals(action)){
+
+                    switch (intent.getStringExtra(BTHelperService.EXTRA_DATA_TYPE)) {
+                        case BTHelperService.EXTRA_HEART_BEAT:
+                            tvHeartBeat.setText(intent.getStringExtra(BTHelperService.EXTRA_DATA));
+                            break;
+                        case BTHelperService.EXTRA_TEMP:
+                            tvTemperature.setText(intent.getStringExtra(BTHelperService.EXTRA_DATA));
+                            break;
+                        case BTHelperService.EXTRA_SPO:
+                            tvSpo.setText(intent.getStringExtra(BTHelperService.EXTRA_DATA));
+                            break;
+                    }
+
+            }else if(BTHelperService.ACTION_CHARA_SUCCESS.equals(action)) {
+                if (characteristics.size() > 0) {
+                    characteristics.remove(0);
+                    if (characteristics.size() > 0) {
+                        helper.setCharacteristicNotification(characteristics.get(0), true);
+                        helper.readCharacteristic(characteristics.get(0));
+                    }
+                }
+            }
+        }
+    };
+
+    private final ScanCallback btScanCallback = new ScanCallback() {
+
+        @Override
+        public void onBatchScanResults(List<ScanResult> results) {
+            super.onBatchScanResults(results);
+            for (ScanResult result : results) {
+                MainActivity.this.onDeviceFound(result.getDevice());
+            }
+        }
+
+        @Override
+        public void onScanResult(int callbackType, ScanResult result) {
+            super.onScanResult(callbackType, result);
+            MainActivity.this.onDeviceFound(result.getDevice());
+        }
+
+        @Override
+        public void onScanFailed(int errorCode) {
+            super.onScanFailed(errorCode);
+            MainActivity.this.onScanFailed(errorCode);
+        }
+
+
+    };
+
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             BTHelperService btHelperService = ((BTHelperService.LocalBinder)service).getService();
-            btHelperService.init( MainActivity.this);
+            if(!btHelperService.initialize()){
+                Log.d("#####","Could not initialise the service");
+                finish();
+            }
             helper = btHelperService;
         }
 
@@ -68,18 +155,6 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
         }
     };
 
-    private final BroadcastReceiver pairingBroadcastReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (BluetoothDevice.ACTION_BOND_STATE_CHANGED.equals(action)) {
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                if (device.getBondState() == BluetoothDevice.BOND_BONDED) {
-                    helper.connectDevice(device, MainActivity.this);
-                }
-            }
-        }
-    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -87,8 +162,25 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
         setContentView(R.layout.activity_main);
         getSupportActionBar().hide();
 
+        someActivityResultLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == Activity.RESULT_OK) {
+
+                        MainActivity.this.startScan();
+                    }else{
+                        MainActivity.this.runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "Please enable the bluetooth", Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    }
+                });
+
+        bluetoothAdapter  = BluetoothAdapter.getDefaultAdapter();
         btSelectArrayAdapter = new BTDeviceListAdapter(MainActivity.this, android.R.layout.select_dialog_singlechoice);
-        btSelectDialog = new AlertDialog.Builder(MainActivity.this);
+
 
         // Use this check to determine whether BLE is supported on the device. Then
         // you can selectively disable BLE-related features.
@@ -99,9 +191,6 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
 
         initIds();
 
-        IntentFilter intentFilter = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
-        this.registerReceiver(pairingBroadcastReceiver, intentFilter);
-
         checkAndReqPermissions();
 
         Intent serviceIntent = new Intent(this,BTHelperService.class);
@@ -110,16 +199,87 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
         }
     }
 
+    public void startScan() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                tvConnectStatus.setText("Scanning for devices");
+            }
+        });
+        bluetoothAdapter.getBluetoothLeScanner().startScan(btScanCallback);
+    }
+
+    public void stopScan() {
+        bluetoothAdapter.getBluetoothLeScanner().stopScan(btScanCallback);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                tvConnectStatus.setText("Tap to connect");
+            }
+        });
+    }
+
+
+    public boolean connectDevice(String address) {
+        stopScan();
+        if (bluetoothAdapter == null || address == null) {
+            Log.w("####### ", "BluetoothAdapter not initialized or unspecified address.");
+            return false;
+        }
+
+        try {
+            final BluetoothDevice device = bluetoothAdapter.getRemoteDevice(address);
+            helper.connect(device.getAddress());
+        } catch (IllegalArgumentException exception) {
+            Log.w("#######", "Device not found with provided address.");
+            return false;
+        }
+
+        return true;
+    }
+
+
+    private void discoverServices(){
+        if(helper == null) return;
+        BluetoothGattService service = helper.getSupportedServices();
+
+        if(service==null) return;
+
+        characteristics.clear();
+        characteristics.addAll(service.getCharacteristics());
+
+        helper.setCharacteristicNotification(characteristics.get(0), true);
+        helper.readCharacteristic(characteristics.get(0));
+
+    }
     @Override
     protected void onResume() {
         super.onResume();
+
+        registerReceiver(gattUpdateReceiver, makeGattUpdateIntentFilter());
+//        if (helper != null) {
+//            final boolean result = helper.connect(address);
+//            Log.d("#####", "Connect request result=" + result);
+//        }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        unregisterReceiver(gattUpdateReceiver);
     }
 
+    private static IntentFilter makeGattUpdateIntentFilter() {
+        final IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(BTHelperService.ACTION_GATT_CONNECTED);
+        intentFilter.addAction(BTHelperService.ACTION_GATT_DISCONNECTED);
+        intentFilter.addAction(BTHelperService.ACTION_GATT_CONNECTING);
+        intentFilter.addAction(BTHelperService.ACTION_GATT_DISCONNECTING);
+        intentFilter.addAction(BTHelperService.ACTION_GATT_SERVICE_DISCOVERED);
+        intentFilter.addAction(BTHelperService.ACTION_DATA_AVAILABLE);
+        intentFilter.addAction(BTHelperService.ACTION_CHARA_SUCCESS);
+        return intentFilter;
+    }
 
 
     @Override
@@ -129,21 +289,10 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
     }
 
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-       Log.d("######", "requestcode "+requestCode+" resultCode "+ resultCode);
-    }
-
 
     private void checkAndReqPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            int REQUEST_CODE = 22;
             requestPermissions(permissions, REQUEST_CODE);
         }
     }
@@ -163,24 +312,32 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
 
     public void onLottieClick(View view) {
         if (helper.getConnectionState() == BluetoothConnectionStates.DISCONNECTED) {
-            showSelectDeviceDialog();
-            helper.startScan();
-            runOnUiThread(()->{
-                tvConnectStatus.setText("Scanning for devices...");
-            });
+            if(!bluetoothAdapter.isEnabled()){
+                Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                someActivityResultLauncher.launch(enableBtIntent);
+            }else {
+                this.startScan();
+            }
         } else if (helper.getConnectionState() == BluetoothConnectionStates.CONNECTED) {
-            helper.disConnectDevice();
+            helper.disconnectDevice();
         }
     }
 
     public void showSelectDeviceDialog() {
 //        builderSingle.setIcon(R.drawable.ic_launcher);
+        if(btAlertDialog !=null && btAlertDialog.isShowing()){
+            return;
+        }
+        btSelectDialog = new AlertDialog.Builder(MainActivity.this);
         btSelectDialog.setTitle("Select Device");
 
-        btSelectDialog.setNegativeButton("cancel", (dialog, which) -> dialog.dismiss());
+        btSelectDialog.setNegativeButton("cancel", (dialog, which) -> {
+            dialog.dismiss();
+            MainActivity.this.stopScan();
+        });
 
-        btSelectDialog.setAdapter(btSelectArrayAdapter, (dialog, which) -> helper.connectDevice(btSelectArrayAdapter.getItem(which).getDevice(), this));
-        btSelectDialog.show();
+        btSelectDialog.setAdapter(btSelectArrayAdapter, (dialog, which) -> this.connectDevice(btSelectArrayAdapter.getItem(which).getDevice().getAddress()));
+        btAlertDialog = btSelectDialog.show();
     }
 
     public void resetFields() {
@@ -191,7 +348,6 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
         });
     }
 
-    @Override
     public void onConnectedToDevice() {
         runOnUiThread(() -> {
             tvConnectStatus.setText("Connected");
@@ -200,7 +356,6 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
         });
     }
 
-    @Override
     public void onDisconnectedFromDevice() {
         runOnUiThread(() -> {
             tvConnectStatus.setText("Disconnected");
@@ -209,7 +364,6 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
         });
     }
 
-    @Override
     public void onConnecting() {
         resetFields();
         runOnUiThread(() -> {
@@ -219,7 +373,6 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
 
     }
 
-    @Override
     public void onDisconnecting() {
         runOnUiThread(() -> {
             tvConnectStatus.setText("Disconnecting... Please wait...");
@@ -228,41 +381,19 @@ public class MainActivity extends AppCompatActivity implements IBluetoothConnect
 
     }
 
-    @Override
-    public void onPairing() {
-        runOnUiThread(() -> tvConnectStatus.setText("Pairing... Please wait..."));
-    }
-
-    @Override
     public void onDeviceFound(BluetoothDevice device) {
-
+        showSelectDeviceDialog();
+        if(device== null || device.getAddress().isEmpty() ){
+            return;
+        }
         if (btSelectArrayAdapter.getPosition(new BTDeviceListAdapter.BTDeviceModel(device)) < 0) {
             btSelectArrayAdapter.add(new BTDeviceListAdapter.BTDeviceModel(device));
             btSelectArrayAdapter.notifyDataSetChanged();
         }
     }
 
-    @Override
     public void onScanFailed(int errorCode) {
         Log.d("#######", "Scan failed");
     }
 
-    @Override
-    public void onHeartBeatReceived(int val) {
-        runOnUiThread(() -> tvHeartBeat.setText(String.valueOf(val)));
-    }
-
-    @Override
-    public void onSpoReceived(float val) {
-        NumberFormat nf = DecimalFormat.getInstance();
-        nf.setMaximumFractionDigits(0);
-        runOnUiThread(() -> tvSpo.setText(nf.format((val * 8) + 90)));
-    }
-
-    @Override
-    public void onTempReceived(float val) {
-        NumberFormat nf = DecimalFormat.getInstance();
-        nf.setMaximumFractionDigits(1);
-        runOnUiThread(() -> tvTemperature.setText(nf.format((val * 5) + 30)));
-    }
 }

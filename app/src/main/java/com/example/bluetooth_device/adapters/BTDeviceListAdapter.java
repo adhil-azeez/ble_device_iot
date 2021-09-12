@@ -35,7 +35,7 @@ public class BTDeviceListAdapter extends ArrayAdapter<BTDeviceListAdapter.BTDevi
              if (this == o) return true;
              if (o == null || getClass() != o.getClass()) return false;
              BTDeviceModel that = (BTDeviceModel) o;
-             return Objects.equals(device, that.device);
+             return device.getAddress().equals(that.device.getAddress());
          }
 
          @Override

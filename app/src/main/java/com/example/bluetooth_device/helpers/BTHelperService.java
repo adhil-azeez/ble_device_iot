@@ -8,67 +8,156 @@ import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
-import android.bluetooth.le.ScanCallback;
-import android.bluetooth.le.ScanResult;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.IBinder;
 import android.util.Log;
+import android.widget.Switch;
 
 import androidx.annotation.Nullable;
 
 import com.example.bluetooth_device.enums.BluetoothConnectionStates;
-import com.example.bluetooth_device.interfaces.IBTHelper;
-import com.example.bluetooth_device.interfaces.IBluetoothConnection;
+import com.example.bluetooth_device.views.MainActivity;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.UUID;
 
-public class BTHelperService extends Service implements IBTHelper {
+import static android.nfc.NfcAdapter.EXTRA_DATA;
+
+public class BTHelperService extends Service {
     public static final String DEVICE_SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
     public static final String CHAR_HEART_BEAT_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
     public static final String CHAR_TEMP_UUID = "5c6ea9f3-b9a5-4ceb-a2d7-ffcbbeb29abb";
     public static final String CHAR_SPO_UUID = "f0b6957d-1d77-4ec8-9755-6c08090fe3a6";
 
+    public final static String ACTION_GATT_CONNECTED =
+            "com.example.bluetooth.le.ACTION_GATT_CONNECTED";
+    public final static String ACTION_GATT_DISCONNECTED =
+            "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED";
+    public final static String ACTION_GATT_CONNECTING =
+            "com.example.bluetooth.le.ACTION_GATT_CONNECTING";
+    public final static String ACTION_GATT_DISCONNECTING =
+            "com.example.bluetooth.le.ACTION_GATT_DISCONNECTING";
+    public final static String ACTION_GATT_SERVICE_DISCOVERED =
+            "com.example.bluetooth.le.ACTION_GATT_SERVICE_DISCOVERED";
+    public final static String ACTION_DATA_AVAILABLE =
+            "com.example.bluetooth.le.ACTION_DATA_AVAILABLE";
+    public final static String ACTION_CHARA_SUCCESS =
+            "com.example.bluetooth.le.ACTION_CHARA_SUCCESS";
+
+    public final static String EXTRA_DATA =
+            "com.example.bluetooth.le.EXTRA_DATA";
+    public final static  String EXTRA_DATA_TYPE = "com.example.bluetooth.le.EXTRA_DATA_TYPE";
+    public final static  String EXTRA_HEART_BEAT = "com.example.bluetooth.le.EXTRA_HEART_BEAT";
+    public final static String EXTRA_TEMP ="com.example.bluetooth.le.EXTRA_TEMP";
+    public final static String EXTRA_SPO = "com.example.bluetooth.le.EXTRA_SPO";
+
 
     private final IBinder mBinder = new LocalBinder();
-    private BluetoothAdapter bluetoothAdapter;
-
 
     private BluetoothConnectionStates connectionState = BluetoothConnectionStates.DISCONNECTED;
-    private ScanCallback btScanCallback = new ScanCallback() {
+
+    private BluetoothGatt btGatt;
+    private BluetoothAdapter bluetoothAdapter;
+
+    private final BluetoothGattCallback mGattCallback = new BluetoothGattCallback() {
 
         @Override
-        public void onBatchScanResults(List<ScanResult> results) {
-            super.onBatchScanResults(results);
-            for (ScanResult result : results) {
-                iBluetoothConnection.onDeviceFound(result.getDevice());
+        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+            broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
+            Log.d("####### char update",characteristic.getValue().toString());
+        }
+
+        @Override
+        public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
+            broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
+            if(status!=BluetoothGatt.GATT_SUCCESS){
+                Log.d("#####", "status not success");
             }
         }
 
         @Override
-        public void onScanResult(int callbackType, ScanResult result) {
-            super.onScanResult(callbackType, result);
-            iBluetoothConnection.onDeviceFound(result.getDevice());
+        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+            if(status!=BluetoothGatt.GATT_SUCCESS){
+                Log.d("#####", "status not success");
+            }else{
+                broadcastUpdate(ACTION_CHARA_SUCCESS);
+            }
         }
+
+
 
         @Override
-        public void onScanFailed(int errorCode) {
-            super.onScanFailed(errorCode);
-            iBluetoothConnection.onScanFailed(errorCode);
+        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
+            Log.d("###### serviceDisc", String.valueOf(status));
+            broadcastUpdate(ACTION_GATT_SERVICE_DISCOVERED);
         }
+
+
+        @Override
+        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+
+            switch (newState) {
+                case BluetoothGatt.STATE_CONNECTED:
+                    Log.d("##### connected", "discovering services");
+                    connectionState = BluetoothConnectionStates.CONNECTED;
+                    broadcastUpdate(ACTION_GATT_CONNECTED);
+                    gatt.discoverServices();
+                    break;
+                case BluetoothGatt.STATE_DISCONNECTED:
+                    connectionState = BluetoothConnectionStates.DISCONNECTED;
+                    broadcastUpdate(ACTION_GATT_DISCONNECTED);
+                    break;
+                case BluetoothGatt.STATE_CONNECTING:
+                    connectionState = BluetoothConnectionStates.CONNECTING;
+                    broadcastUpdate(ACTION_GATT_CONNECTING);
+                    break;
+                case BluetoothGatt.STATE_DISCONNECTING:
+                    connectionState = BluetoothConnectionStates.DISCONNECTING;
+                    broadcastUpdate(ACTION_GATT_DISCONNECTING);
+                    break;
+            }
+        }
+
     };
-    private IBluetoothConnection iBluetoothConnection;
 
-    private BluetoothDevice device;
+    public  void disconnectDevice(){
+        if(this.connectionState == BluetoothConnectionStates.CONNECTED)
+        this.btGatt.disconnect();
+    }
 
-    private BluetoothGatt btGatt;
+    public BluetoothGattService getSupportedServices() {
+        if (btGatt == null) {
+            return null;
+        }
+        return btGatt.getService(UUID.fromString(DEVICE_SERVICE_UUID));
+    }
 
-    List<BluetoothGattCharacteristic> chars = new ArrayList<>();
+    public void readCharacteristic(BluetoothGattCharacteristic characteristic) {
+        if (btGatt == null) {
+            Log.w("#######", "BluetoothGatt not initialized");
+            return;
+        }
+        if(!btGatt.readCharacteristic(characteristic)){
+            Log.d("#######", "Cannot read charact");
+        }
+    }
 
-    private GattListener mGattCallback;
+    public void setCharacteristicNotification(BluetoothGattCharacteristic characteristic,boolean enabled) {
+        if (btGatt == null) {
+            Log.w("######", "BluetoothGatt not initialized");
+            return;
+        }
+        btGatt.setCharacteristicNotification(characteristic, enabled);
+
+        // This is specific to Heart Rate Measurement.
+//        if (CHAR_HEART_BEAT_UUID.equals(characteristic.getUuid().toString())) {
+            BluetoothGattDescriptor descriptor = characteristic.getDescriptors().get(0);
+            descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+            btGatt.writeDescriptor(descriptor);
+//        }
+    }
 
     @Nullable
     @Override
@@ -78,56 +167,91 @@ public class BTHelperService extends Service implements IBTHelper {
 
     @Override
     public boolean onUnbind(Intent intent) {
-        disConnectDevice();
+        close();
         return super.onUnbind(intent);
     }
 
-    @Override
+    private void close() {
+        if (btGatt == null) {
+            return;
+        }
+        btGatt.close();
+        btGatt = null;
+    }
+
     public BluetoothConnectionStates getConnectionState() {
         return connectionState;
     }
 
-    @Override
-    public void startScan() {
-        bluetoothAdapter.getBluetoothLeScanner().startScan(btScanCallback);
+
+    public boolean initialize() {
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (bluetoothAdapter == null) {
+            Log.e("#########", "Unable to obtain a BluetoothAdapter.");
+            return false;
+        }
+        return true;
     }
 
-    @Override
-    public void stopScan() {
-        bluetoothAdapter.getBluetoothLeScanner().stopScan(btScanCallback);
+    public boolean connect(final String address) {
+        if (bluetoothAdapter == null || address == null) {
+            Log.w("#######", "BluetoothAdapter not initialized or unspecified address.");
+            return false;
+        }
+        try {
+            final BluetoothDevice device = bluetoothAdapter.getRemoteDevice(address);
+            // connect to the GATT server on the device
+            btGatt = device.connectGatt(this, false, mGattCallback);
+            return true;
+        } catch (IllegalArgumentException exception) {
+            Log.w("########", "Device not found with provided address.  Unable to connect.");
+            return false;
+        }
     }
 
-    @Override
-    public void connectDevice(BluetoothDevice device, Context context) {
-        stopScan();
-        if (this.device != null && this.device.getAddress().equals(device.getAddress())) {
-            btGatt.connect();
-        } else if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
-            iBluetoothConnection.onPairing();
-            device.createBond();
+    private void broadcastUpdate(final String action) {
+        final Intent intent = new Intent(action);
+        sendBroadcast(intent);
+    }
+
+    private void broadcastUpdate(final String action,
+                                 final BluetoothGattCharacteristic characteristic) {
+        final Intent intent = new Intent(action);
+
+        int flag = characteristic.getProperties();
+        int format = -1;
+        if ((flag & 0x01) != 0) {
+            format = BluetoothGattCharacteristic.FORMAT_UINT16;
         } else {
-            btGatt = device.connectGatt(context, false, mGattCallback);
-            this.device = device;
+            format = BluetoothGattCharacteristic.FORMAT_UINT8;
         }
 
-    }
 
-    public void init(IBluetoothConnection iBluetoothConnection) {
-        this.bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        this.iBluetoothConnection = iBluetoothConnection;
-        this.mGattCallback = new GattListener(iBluetoothConnection);
-    }
+        // This is special handling for the Heart Rate Measurement profile. Data
+        // parsing is carried out as per profile specifications.
+        if (CHAR_HEART_BEAT_UUID.equals(characteristic.getUuid().toString())) {
 
-    @Override
-    public void disConnectDevice() {
-        iBluetoothConnection.onDisconnecting();
-        if (this.btGatt != null) {
-            this.btGatt.disconnect();
-            this.btGatt.close();
-            this.btGatt = null;
+            final float heartRate =  ByteBuffer.wrap(characteristic.getValue()).order(ByteOrder.LITTLE_ENDIAN).getFloat();
+            Log.d("#######","Received heart rate: "+ heartRate);
+            intent.putExtra(EXTRA_DATA, String.format(java.util.Locale.US,"%.0f",heartRate));
+            intent.putExtra(EXTRA_DATA_TYPE,EXTRA_HEART_BEAT);
+            sendBroadcast(intent);
+        } else if(CHAR_TEMP_UUID.equals(characteristic.getUuid().toString())) {
+            final float temp =  ByteBuffer.wrap(characteristic.getValue()).order(ByteOrder.LITTLE_ENDIAN).getFloat();;
+            Log.d("#######", "Received Temp rate: "+temp);
+            intent.putExtra(EXTRA_DATA, String.format(java.util.Locale.US,"%.1f",temp));
+            intent.putExtra(EXTRA_DATA_TYPE,EXTRA_TEMP);
+            sendBroadcast(intent);
+
+        }else if(CHAR_SPO_UUID.equals(characteristic.getUuid().toString())){
+            final float spo =  ByteBuffer.wrap(characteristic.getValue()).order(ByteOrder.LITTLE_ENDIAN).getFloat();;
+            Log.d("#######", "Received SPO rate: "+ spo);
+            intent.putExtra(EXTRA_DATA, String.format(java.util.Locale.US,"%.1f",spo));
+            intent.putExtra(EXTRA_DATA_TYPE,EXTRA_SPO);
+            sendBroadcast(intent);
         }
-        iBluetoothConnection.onDisconnectedFromDevice();
     }
+
 
     public class LocalBinder extends Binder {
         public BTHelperService getService() {
@@ -135,124 +259,4 @@ public class BTHelperService extends Service implements IBTHelper {
         }
     }
 
-    public class GattListener extends  BluetoothGattCallback{
-
-        final IBluetoothConnection iBluetoothConnection;
-
-        public GattListener(IBluetoothConnection iBluetoothConnection) {
-            this.iBluetoothConnection = iBluetoothConnection;
-        }
-
-
-        @Override
-        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-            int flag = characteristic.getProperties();
-            int format = -1;
-
-
-            if (characteristic.getUuid().toString().equals(CHAR_HEART_BEAT_UUID)) {
-                if ((flag & 0x01) != 0) {
-                    format = BluetoothGattCharacteristic.FORMAT_UINT16;
-//                    Log.d("#####", "Heart rate format UINT16.");
-                } else {
-                    format = BluetoothGattCharacteristic.FORMAT_UINT8;
-//                    Log.d("#####", "Heart rate format UINT8.");
-                }
-                int value = characteristic.getIntValue(format, 0);
-//                Log.d("###### onCharChanged", value + "");
-                iBluetoothConnection.onHeartBeatReceived(value);
-            } else if (characteristic.getUuid().toString().equals(CHAR_TEMP_UUID)) {
-                float value = characteristic.getFloatValue(BluetoothGattCharacteristic.FORMAT_FLOAT, 0);
-                iBluetoothConnection.onTempReceived(value);
-            } else if (characteristic.getUuid().toString().equals(CHAR_SPO_UUID)) {
-                float value = characteristic.getFloatValue(BluetoothGattCharacteristic.FORMAT_FLOAT, 0);
-                iBluetoothConnection.onSpoReceived(value);
-            }
-        }
-
-        @Override
-        public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-            Log.d("###### onCharRead", characteristic.getUuid().toString());
-            Log.d("######### onCharRead", "status "+status);
-
-            if (btGatt.setCharacteristicNotification(characteristic, true)) {
-                Log.d("#####", "Charact Notif success");
-            } else {
-                Log.d("#####", "Charact Notif failure");
-            }
-            BluetoothGattDescriptor descriptor = characteristic.getDescriptor(characteristic.getDescriptors().get(0).getUuid());
-            descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-            if (btGatt.writeDescriptor(descriptor)) {
-                Log.d("#####", "descriptor Notif success for " + descriptor.getUuid().toString());
-            } else {
-                Log.d("#####", "descriptor Notif failure");
-            }
-//            descriptor.setValue(BluetoothGattDescriptor.ENABLE_INDICATION_VALUE);
-//            if (btGatt.writeDescriptor(descriptor)) {
-//                Log.d("#####", "descriptor INDIC success");
-//            } else {
-//                Log.d("#####", "descriptor INDIC failure");
-//            }
-
-            if(status == BluetoothGatt.GATT_SUCCESS) {
-                chars.remove(chars.size() - 1);
-                if (chars.size() > 0) {
-                    reqCharacteristic();
-                }
-            }
-        }
-
-        @Override
-        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-            Log.d("###### serviceDisc", String.valueOf(status));
-            BluetoothGattService testService = gatt.getService(UUID.fromString(DEVICE_SERVICE_UUID));
-            if (testService != null) {
-                chars.clear();
-                chars.addAll(testService.getCharacteristics());
-                reqCharacteristic();
-//                btGatt.readCharacteristic(testService.getCharacteristics().get(0));
-            }
-        }
-
-        private void reqCharacteristic(){
-            if(btGatt.readCharacteristic(chars.get(chars.size()-1))){
-                Log.d("#######","car read success");
-            }else{
-                Log.d("#######","car read failed");
-
-            }
-        }
-
-        @Override
-        public void onDescriptorRead(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
-            Log.d("###### onDescRead", descriptor.toString());
-        }
-
-
-        @Override
-        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-
-            switch (newState) {
-                case BluetoothGatt.STATE_CONNECTED:
-                    Log.d("##### connectd", "discovering services");
-                    connectionState = BluetoothConnectionStates.CONNECTED;
-                    iBluetoothConnection.onConnectedToDevice();
-                    gatt.discoverServices();
-                    break;
-                case BluetoothGatt.STATE_DISCONNECTED:
-                    connectionState = BluetoothConnectionStates.DISCONNECTED;
-                    iBluetoothConnection.onDisconnectedFromDevice();
-                    break;
-                case BluetoothGatt.STATE_CONNECTING:
-                    connectionState = BluetoothConnectionStates.CONNECTING;
-                    iBluetoothConnection.onConnecting();
-                    break;
-                case BluetoothGatt.STATE_DISCONNECTING:
-                    connectionState = BluetoothConnectionStates.DISCONNECTING;
-                    iBluetoothConnection.onDisconnecting();
-                    break;
-            }
-        }
-
-    }
 }
