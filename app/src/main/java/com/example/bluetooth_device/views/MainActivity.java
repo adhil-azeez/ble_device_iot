@@ -71,6 +71,7 @@ public class MainActivity extends AppCompatActivity {
 
     private BluetoothAdapter bluetoothAdapter;
     private ActivityResultLauncher<Intent> someActivityResultLauncher;
+    private boolean isScanning = false;
 
 
     private final BroadcastReceiver gattUpdateReceiver = new BroadcastReceiver() {
@@ -200,16 +201,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void startScan() {
+        this.isScanning = true;
+
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
                 tvConnectStatus.setText("Scanning for devices");
+                // Added Dummy data here
+                tvHeartBeat.setText("80");
+                tvTemperature.setText("37");
+                tvSpo.setText("96");
             }
         });
         bluetoothAdapter.getBluetoothLeScanner().startScan(btScanCallback);
     }
 
     public void stopScan() {
+        this.isScanning = false;
         bluetoothAdapter.getBluetoothLeScanner().stopScan(btScanCallback);
         runOnUiThread(new Runnable() {
             @Override
@@ -217,6 +225,8 @@ public class MainActivity extends AppCompatActivity {
                 tvConnectStatus.setText("Tap to connect");
             }
         });
+        // Added for dummy data
+        resetFields();
     }
 
 
@@ -311,12 +321,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onLottieClick(View view) {
+        Log.d("############", helper.getConnectionState().toString());
         if (helper.getConnectionState() == BluetoothConnectionStates.DISCONNECTED) {
             if(!bluetoothAdapter.isEnabled()){
                 Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
                 someActivityResultLauncher.launch(enableBtIntent);
             }else {
-                this.startScan();
+                if(!this.isScanning) {
+                    this.startScan();
+                }else{
+                    this.stopScan();
+                }
             }
         } else if (helper.getConnectionState() == BluetoothConnectionStates.CONNECTED) {
             helper.disconnectDevice();
@@ -349,6 +364,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onConnectedToDevice() {
+        this.isScanning = false;
+
         runOnUiThread(() -> {
             tvConnectStatus.setText("Connected");
             lottieAnimationView.pauseAnimation();
@@ -393,6 +410,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onScanFailed(int errorCode) {
+        this.isScanning = false;
         Log.d("#######", "Scan failed");
     }
 
