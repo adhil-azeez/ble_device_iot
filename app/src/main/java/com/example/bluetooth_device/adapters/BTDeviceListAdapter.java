@@ -13,34 +13,34 @@ public class BTDeviceListAdapter extends ArrayAdapter<BTDeviceListAdapter.BTDevi
         super(context, resource);
     }
 
-     public static class BTDeviceModel{
-        final BluetoothDevice device;
+         public static class BTDeviceModel{
+            final BluetoothDevice device;
 
 
-         public BTDeviceModel(BluetoothDevice device) {
-             this.device = device;
+             public BTDeviceModel(BluetoothDevice device) {
+                 this.device = device;
+             }
+
+             @Override
+             public String toString() {
+                 return device.getName();
+             }
+
+             public BluetoothDevice getDevice() {
+                 return device;
+             }
+
+             @Override
+             public boolean equals(Object o) {
+                 if (this == o) return true;
+                 if (o == null || getClass() != o.getClass()) return false;
+                 BTDeviceModel that = (BTDeviceModel) o;
+                 return device.getAddress().equals(that.device.getAddress());
+             }
+
+             @Override
+             public int hashCode() {
+                 return Objects.hash(device);
+             }
          }
-
-         @Override
-         public String toString() {
-             return device.getName();
-         }
-
-         public BluetoothDevice getDevice() {
-             return device;
-         }
-
-         @Override
-         public boolean equals(Object o) {
-             if (this == o) return true;
-             if (o == null || getClass() != o.getClass()) return false;
-             BTDeviceModel that = (BTDeviceModel) o;
-             return device.getAddress().equals(that.device.getAddress());
-         }
-
-         @Override
-         public int hashCode() {
-             return Objects.hash(device);
-         }
-     }
 }

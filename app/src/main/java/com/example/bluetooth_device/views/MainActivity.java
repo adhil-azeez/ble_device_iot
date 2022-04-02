@@ -43,6 +43,7 @@ import com.example.bluetooth_device.adapters.BTDeviceListAdapter;
 import com.example.bluetooth_device.enums.BluetoothConnectionStates;
 import com.example.bluetooth_device.helpers.BTHelperService;
 
+
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
