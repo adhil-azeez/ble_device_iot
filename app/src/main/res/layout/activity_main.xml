@@ -17,6 +17,22 @@
         app:layout_constraintTop_toTopOf="parent">
 
         <ImageButton
+            android:id="@+id/imageButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="Edit Profile"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:srcCompat="@drawable/user"
+            android:onClick="onEditProfileClick"
+            />
+
+        <ImageButton
             android:id="@+id/ib_exit"
             style="@android:style/Widget.Holo.ImageButton"
             android:layout_width="48dp"
@@ -38,14 +54,13 @@
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:layout_marginBottom="32dp"
+            android:onClick="onLottieClick"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/ib_exit"
-            app:lottie_rawRes="@raw/bluetooth"
-            android:onClick="onLottieClick"
             app:lottie_loop="true"
-            />
+            app:lottie_rawRes="@raw/bluetooth" />
 
         <TextView
             android:id="@+id/tv_tap_to_connect"

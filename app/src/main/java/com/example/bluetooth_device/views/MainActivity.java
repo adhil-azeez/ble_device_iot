@@ -1,11 +1,7 @@
 package com.example.bluetooth_device.views;
 
-import androidx.activity.result.ActivityResult;
-import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.Manifest;
@@ -15,22 +11,18 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
-import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.View;
@@ -44,8 +36,6 @@ import com.example.bluetooth_device.enums.BluetoothConnectionStates;
 import com.example.bluetooth_device.helpers.BTHelperService;
 
 
-import java.text.DecimalFormat;
-import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,7 +44,7 @@ public class MainActivity extends AppCompatActivity {
     private final ArrayList<BluetoothGattCharacteristic> characteristics = new ArrayList<>();
     private BTDeviceListAdapter btSelectArrayAdapter;
     private AlertDialog.Builder btSelectDialog;
-    private  AlertDialog btAlertDialog;
+    private AlertDialog btAlertDialog;
 
     private LottieAnimationView lottieAnimationView;
     private BTHelperService helper;
@@ -74,6 +64,66 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<Intent> someActivityResultLauncher;
     private boolean isScanning = false;
 
+    private long startTime = 0;
+
+    private final Handler timerHandler = new Handler();
+    private final Runnable timerRunnable = new Runnable() {
+        @Override
+        public void run() {
+              final  int TIMER_LIMIT_IN_SEC = 60;
+
+            if(isAnyListEmpty()){
+                tvConnectStatus.setText("Please hold your finger on device");
+                timerHandler.postDelayed(this, 500);
+                return;
+            }
+
+            if(startTime ==0) {
+                startTime = System.currentTimeMillis();
+                resetFields();
+            }
+
+            long millis = System.currentTimeMillis() - startTime;
+            int seconds = (int) (millis / 1000);
+            Log.d("#################", "Sec "+seconds);
+            int minutes = seconds / 60;
+
+
+
+            if(seconds>=TIMER_LIMIT_IN_SEC){
+                tvConnectStatus.setText("Please hold your finger on device");
+                MainActivity.this.onTimerComplete();
+                return;
+            }
+
+
+
+            seconds = seconds % 60;
+            tvConnectStatus.setText("Please hold on to the device for "+(TIMER_LIMIT_IN_SEC - seconds)+" seconds");
+
+            timerHandler.postDelayed(this, 500);
+        }
+    };
+
+    private boolean isAnyListEmpty() {
+        if(temperatureResults.isEmpty()){
+            return true;
+        }
+
+        if(heartRateResults.isEmpty()){
+            return true;
+        }
+
+        if(spoResults.isEmpty()){
+            return true;
+        }
+
+        return false;
+    }
+
+    private ArrayList<Float> temperatureResults = new ArrayList<>();
+    private ArrayList<Float> heartRateResults = new ArrayList<>();
+    private ArrayList<Float> spoResults = new ArrayList<>();
 
     private final BroadcastReceiver gattUpdateReceiver = new BroadcastReceiver() {
         @Override
@@ -93,13 +143,44 @@ public class MainActivity extends AppCompatActivity {
 
                     switch (intent.getStringExtra(BTHelperService.EXTRA_DATA_TYPE)) {
                         case BTHelperService.EXTRA_HEART_BEAT:
-                            tvHeartBeat.setText(intent.getStringExtra(BTHelperService.EXTRA_DATA));
+
+                            float heartRate = intent.getFloatExtra(BTHelperService.EXTRA_DATA, 0.0f);
+                            if(heartRate == 0){
+                                tvHeartBeat.setText(String.format(java.util.Locale.US,"%.0f",heartRate));
+                            }
+
+                            if(heartRate<60){
+                                break;
+                            }
+
+                            if(heartRate>200){
+                                break;
+                            }
+                            heartRateResults.add(heartRate);
+                            tvHeartBeat.setText(String.format(java.util.Locale.US,"%.0f",heartRate));
                             break;
                         case BTHelperService.EXTRA_TEMP:
-                            tvTemperature.setText(intent.getStringExtra(BTHelperService.EXTRA_DATA));
+                            float temp = intent.getFloatExtra(BTHelperService.EXTRA_DATA, 0.0f);
+                            if(temp<25){
+                                break;
+                            }
+                            temperatureResults.add(temp);
+                            tvTemperature.setText(String.format(java.util.Locale.US,"%.1f",temp));
                             break;
                         case BTHelperService.EXTRA_SPO:
-                            tvSpo.setText(intent.getStringExtra(BTHelperService.EXTRA_DATA));
+                            float spo = intent.getFloatExtra(BTHelperService.EXTRA_DATA, 0.0f);
+                            if(spo == 0){
+                                tvSpo.setText(String.format(java.util.Locale.US,"%.1f",spo));
+                            }
+                            if(spo<80){
+                                break;
+                            }
+
+                            if(spo>100){
+                                break;
+                            }
+                            spoResults.add(spo);
+                            tvSpo.setText(String.format(java.util.Locale.US,"%.1f",spo));
                             break;
                     }
 
@@ -201,6 +282,65 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private  void startTimer(){
+        startTime = 0;
+        resetFields();
+        timerHandler.postDelayed(timerRunnable, 0);
+        clearResultList();
+    }
+
+    private  void stopTimer(){
+        timerHandler.removeCallbacks(timerRunnable);
+        resetFields();
+    }
+
+    private void onTimerComplete(){
+        stopTimer();
+        calculateAndShowResult();
+        clearResultList();
+    }
+
+    private void calculateAndShowResult() {
+        final int sizeLimit = 20;
+        Log.d("#################","heartRateResult: "+heartRateResults.size());
+        Log.d("#################","tempResult: "+temperatureResults.size());
+        Log.d("#################","spoResult: "+spoResults.size());
+
+        if(heartRateResults.size()<sizeLimit){
+            showToast("Not enough data. Please try again");
+            return;
+        }
+        if(spoResults.size()<sizeLimit){
+            showToast("Not enough data. Please try again");
+            return;
+        }
+        if(temperatureResults.size()<5){
+            showToast("Not enough data. Please try again");
+            return;
+        }
+        float temperature = temperatureResults.get(temperatureResults.size()-1);
+        float spo = modeOfFloatArray( spoResults.subList(spoResults.size()-10-1, spoResults.size()-1 ));
+        float heartRate = averageOfFloatArray(heartRateResults.subList(heartRateResults.size()-10-1, heartRateResults.size()-1 ));
+
+
+        Intent intent = new Intent(this, CovidResultActivity.class);
+        intent.putExtra("HEARTBEAT", heartRate);
+        intent.putExtra("SPO", spo);
+        intent.putExtra("TEMPERATURE", temperature);
+        startActivity(intent);
+    }
+
+
+    private void showToast(String s) {
+        Toast.makeText(getApplicationContext(), s, Toast.LENGTH_SHORT).show();
+    }
+
+    private void clearResultList(){
+        temperatureResults.clear();
+        heartRateResults.clear();
+        spoResults.clear();
+    }
+
     public void startScan() {
         this.isScanning = true;
 
@@ -209,9 +349,9 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 tvConnectStatus.setText("Scanning for devices");
                 // Added Dummy data here
-                tvHeartBeat.setText("80");
-                tvTemperature.setText("37");
-                tvSpo.setText("96");
+//                tvHeartBeat.setText("80");
+//                tvTemperature.setText("37");
+//                tvSpo.setText("96");
             }
         });
         bluetoothAdapter.getBluetoothLeScanner().startScan(btScanCallback);
@@ -299,8 +439,6 @@ public class MainActivity extends AppCompatActivity {
         unbindService(serviceConnection);
     }
 
-
-
     private void checkAndReqPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             int REQUEST_CODE = 22;
@@ -315,7 +453,6 @@ public class MainActivity extends AppCompatActivity {
         tvSpo = findViewById(R.id.tv_spo_value);
         tvTemperature = findViewById(R.id.tv_temp_value);
     }
-
 
     public void exitFromApp(View view) {
         this.finishAffinity();
@@ -370,12 +507,14 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(() -> {
             tvConnectStatus.setText("Connected");
             lottieAnimationView.pauseAnimation();
-
+            this.startTimer();
         });
     }
 
     public void onDisconnectedFromDevice() {
+
         runOnUiThread(() -> {
+            this.stopTimer();
             tvConnectStatus.setText("Disconnected");
             lottieAnimationView.pauseAnimation();
 
@@ -401,7 +540,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void onDeviceFound(BluetoothDevice device) {
         showSelectDeviceDialog();
-        if(device== null || device.getAddress().isEmpty() ){
+        if(device== null || device.getAddress().isEmpty() || device.getName()==null|| device.getName().isEmpty() ){
             return;
         }
         if (btSelectArrayAdapter.getPosition(new BTDeviceListAdapter.BTDeviceModel(device)) < 0) {
@@ -410,9 +549,47 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+
+
+     float modeOfFloatArray(List<Float> a) {
+       int maxCount = 0, i, j;
+         float maxValue = 0;
+
+        for (i = 0; i < a.size(); ++i) {
+            int count = 0;
+            for (j = 0; j < a.size(); ++j) {
+                if (a.get(j) == a.get(i))
+                    ++count;
+            }
+
+            if (count > maxCount) {
+                maxCount = count;
+                maxValue = a.get(i);
+            }
+        }
+        return maxValue;
+    }
+
+    float averageOfFloatArray(List<Float> a){
+        float sum = 0;
+        for(int i=0;i<a.size();i++){
+            sum += a.get(i);
+        }
+        return sum/a.size();
+    }
+
     public void onScanFailed(int errorCode) {
         this.isScanning = false;
         Log.d("#######", "Scan failed");
     }
 
+    public void onEditProfileClick(View view) {
+        startActivity(new Intent(MainActivity.this, ProfileActivity.class));
+
+//        Intent intent = new Intent(this, CovidResultActivity.class);
+//        intent.putExtra("HEARTBEAT", 50.0f);
+//        intent.putExtra("SPO", 50.0f);
+//        intent.putExtra("TEMPERATURE", 50.0f);
+//        startActivity(intent);
+    }
 }

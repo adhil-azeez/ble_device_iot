@@ -233,20 +233,20 @@ public class BTHelperService extends Service {
 
             final float heartRate =  ByteBuffer.wrap(characteristic.getValue()).order(ByteOrder.LITTLE_ENDIAN).getFloat();
             Log.d("#######","Received heart rate: "+ heartRate);
-            intent.putExtra(EXTRA_DATA, String.format(java.util.Locale.US,"%.0f",heartRate));
+            intent.putExtra(EXTRA_DATA, heartRate);
             intent.putExtra(EXTRA_DATA_TYPE,EXTRA_HEART_BEAT);
             sendBroadcast(intent);
         } else if(CHAR_TEMP_UUID.equals(characteristic.getUuid().toString())) {
             final float temp =  ByteBuffer.wrap(characteristic.getValue()).order(ByteOrder.LITTLE_ENDIAN).getFloat();;
             Log.d("#######", "Received Temp rate: "+temp);
-            intent.putExtra(EXTRA_DATA, String.format(java.util.Locale.US,"%.1f",temp));
+            intent.putExtra(EXTRA_DATA, temp);
             intent.putExtra(EXTRA_DATA_TYPE,EXTRA_TEMP);
             sendBroadcast(intent);
 
         }else if(CHAR_SPO_UUID.equals(characteristic.getUuid().toString())){
             final float spo =  ByteBuffer.wrap(characteristic.getValue()).order(ByteOrder.LITTLE_ENDIAN).getFloat();;
             Log.d("#######", "Received SPO rate: "+ spo);
-            intent.putExtra(EXTRA_DATA, String.format(java.util.Locale.US,"%.1f",spo));
+            intent.putExtra(EXTRA_DATA, spo);
             intent.putExtra(EXTRA_DATA_TYPE,EXTRA_SPO);
             sendBroadcast(intent);
         }

@@ -1,4 +1,6 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
+ext {
+    var = '/Users/adhilazeez/AndroidStudioProjects/bluetooth_device/keystore.jks'
+}// Top-level build file where you can add configuration options common to all sub-projects/modules.
 buildscript {
     repositories {
         google()

@@ -3,6 +3,20 @@ plugins {
 }
 
 android {
+    signingConfigs {
+        debug {
+            storeFile file('/Users/adhilazeez/AndroidStudioProjects/bluetooth_device/keystore.jks')
+            storePassword 'android'
+            keyAlias 'android'
+            keyPassword 'android'
+        }
+        release {
+            storeFile file(var)
+            storePassword 'android'
+            keyAlias 'android'
+            keyPassword 'android'
+        }
+    }
     compileSdkVersion 30
     buildToolsVersion "30.0.3"
 
@@ -28,6 +42,7 @@ android {
     }
     buildFeatures {
         mlModelBinding true
+        viewBinding true
     }
 }
 
@@ -39,6 +54,8 @@ dependencies {
     implementation 'com.airbnb.android:lottie:3.7.0'
     implementation 'org.tensorflow:tensorflow-lite-support:0.1.0'
     implementation 'org.tensorflow:tensorflow-lite-metadata:0.1.0'
+    implementation 'androidx.navigation:navigation-fragment:2.3.5'
+    implementation 'androidx.navigation:navigation-ui:2.3.5'
 
 
     testImplementation 'junit:junit:4.+'
