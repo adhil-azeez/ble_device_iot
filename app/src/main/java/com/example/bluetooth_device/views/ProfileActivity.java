@@ -49,6 +49,13 @@ public class ProfileActivity extends AppCompatActivity {
         etDOB = findViewById(R.id.etDOB);
         rbGender = findViewById(R.id.rgGender);
 
+        findViewById(R.id.btnSave).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                onSaveClick(view);
+            }
+        });
+
         DatePickerDialog.OnDateSetListener date =new DatePickerDialog.OnDateSetListener() {
             @Override
             public void onDateSet(DatePicker view, int year, int month, int day) {
@@ -104,6 +111,7 @@ public class ProfileActivity extends AppCompatActivity {
 
         if(dob.isEmpty()){
             Toast.makeText(this, "Please select the Date of Birth", Toast.LENGTH_SHORT).show();
+            return;
         }
 
         SharedPreferences sp =  getApplicationContext().getSharedPreferences("SharedPreferences", Context.MODE_PRIVATE);

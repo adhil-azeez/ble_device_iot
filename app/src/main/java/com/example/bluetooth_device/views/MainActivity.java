@@ -592,4 +592,8 @@ public class MainActivity extends AppCompatActivity {
 //        intent.putExtra("TEMPERATURE", 50.0f);
 //        startActivity(intent);
     }
+
+    public void onTapManualEntry(View view) {
+        startActivity(new Intent(MainActivity.this, EntryActivity.class));
+    }
 }

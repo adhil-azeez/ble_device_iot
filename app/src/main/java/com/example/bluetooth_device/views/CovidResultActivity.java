@@ -3,6 +3,7 @@ package com.example.bluetooth_device.views;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -75,34 +76,63 @@ public class CovidResultActivity extends AppCompatActivity {
         tvGender = findViewById(R.id.tvGender);
         tvDOB = findViewById(R.id.tvDob);
 
-        SharedPreferences sp = getApplicationContext().getSharedPreferences("SharedPreferences", Context.MODE_PRIVATE);
+        if(getIntent().getBooleanExtra("HAS_USER_INFO", false)){
+            Intent intent = getIntent();
+                tvName.setText(intent.getStringExtra("NAME"));
 
-        if(sp.contains("NAME")){
-            tvName.setText(sp.getString("NAME",""));
+
+                tvGender.setText(intent.getStringExtra("GENDER"));
+
+
+                String dob = intent.getStringExtra("DOB");
+                tvDOB.setText(dob);
+                try{
+
+                    if(dob.contains("/")){
+                        String[] splits  = dob.split("/");
+                        if(splits.length == 3){
+                            String age = getAge(Integer.parseInt(splits[2]), Integer.parseInt(splits[1]), Integer.parseInt(splits[0]));
+                            tvAge.setText(age);
+                        }
+                    }
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+
+
+
+        }else{
+            SharedPreferences sp = getApplicationContext().getSharedPreferences("SharedPreferences", Context.MODE_PRIVATE);
+
+            if(sp.contains("NAME")){
+                tvName.setText(sp.getString("NAME",""));
+            }
+
+            if(sp.contains("GENDER")){
+                tvGender.setText(sp.getString("GENDER",""));
+            }
+
+            if(sp.contains("DOB")){
+                String dob = sp.getString("DOB","");
+                tvDOB.setText(dob);
+                try{
+
+                    if(dob.contains("/")){
+                        String[] splits  = dob.split("/");
+                        if(splits.length == 3){
+                            String age = getAge(Integer.parseInt(splits[2]), Integer.parseInt(splits[1]), Integer.parseInt(splits[0]));
+                            tvAge.setText(age);
+                        }
+                    }
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+
+
+            }
         }
 
-        if(sp.contains("GENDER")){
-            tvGender.setText(sp.getString("GENDER",""));
-        }
 
-        if(sp.contains("DOB")){
-            String dob = sp.getString("DOB","");
-            tvDOB.setText(dob);
-           try{
-
-               if(dob.contains("/")){
-                   String[] splits  = dob.split("/");
-                   if(splits.length == 3){
-                       String age = getAge(Integer.parseInt(splits[2]), Integer.parseInt(splits[1]), Integer.parseInt(splits[0]));
-                       tvAge.setText(age);
-                   }
-               }
-           }catch (Exception e){
-               e.printStackTrace();
-           }
-
-
-        }
 
 
     }

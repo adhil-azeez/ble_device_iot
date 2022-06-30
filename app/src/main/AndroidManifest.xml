@@ -18,6 +18,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Bluetooth_device">
         <activity
+            android:name=".views.EntryActivity"
+            android:exported="false" />
+        <activity
             android:name=".views.SplashActivity"
             android:exported="true">
             <intent-filter>
@@ -29,15 +32,20 @@
         <activity
             android:name=".views.CovidResultActivity"
             android:exported="false" />
-        <activity android:name=".views.MainActivity" android:exported="false">
-<!--            <intent-filter>-->
-<!--                <action android:name="android.intent.action.MAIN" />-->
+        <activity
+            android:name=".views.MainActivity"
+            android:exported="false">
 
-<!--                <category android:name="android.intent.category.LAUNCHER" />-->
-<!--            </intent-filter>-->
+            <!-- <intent-filter> -->
+            <!-- <action android:name="android.intent.action.MAIN" /> -->
+
+
+            <!-- <category android:name="android.intent.category.LAUNCHER" /> -->
+            <!-- </intent-filter> -->
         </activity>
-
-        <activity android:name=".views.ProfileActivity" android:exported="false"/>
+        <activity
+            android:name=".views.ProfileActivity"
+            android:exported="false" />
 
         <service
             android:name=".helpers.BTHelperService"

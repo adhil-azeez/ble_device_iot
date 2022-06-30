@@ -5,25 +5,25 @@ plugins {
 android {
     signingConfigs {
         debug {
-            storeFile file('/Users/adhilazeez/AndroidStudioProjects/bluetooth_device/keystore.jks')
+            storeFile file('/Users/adhil/Documents/projects/ble_device_iot/keystore.jks')
             storePassword 'android'
             keyAlias 'android'
             keyPassword 'android'
         }
         release {
-            storeFile file(var)
+            storeFile file('/Users/adhil/Documents/projects/ble_device_iot/keystore.jks')
             storePassword 'android'
             keyAlias 'android'
             keyPassword 'android'
         }
     }
-    compileSdkVersion 30
+    compileSdk 33
     buildToolsVersion "30.0.3"
 
     defaultConfig {
         applicationId "com.example.bluetooth_device"
         minSdkVersion 21
-        targetSdkVersion 30
+        targetSdk 33
         versionCode 1
         versionName "1.0"
 
@@ -34,6 +34,8 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+            debuggable false
         }
     }
     compileOptions {
